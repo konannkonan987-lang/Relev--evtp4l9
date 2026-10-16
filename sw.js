@@ -1,5 +1,5 @@
 // Cache hors-ligne : l'application et Leaflet en cache d'abord ; les fonds de carte en réseau d'abord, avec repli sur le cache.
-const V = 'releve-v1';
+const V = 'releve-v2';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-180.png',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(V).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });

@@ -53,8 +53,25 @@ button{cursor:pointer}
 .tabs button[aria-selected="true"]{background:var(--panel);color:var(--ink);box-shadow:0 1px 3px rgb(0 0 0/.12)}
 .pane{overflow:auto;min-height:0;display:flex;flex-direction:column;gap:10px;-webkit-overflow-scrolling:touch}
 .lbl{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
-.types{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
-.types::-webkit-scrollbar{display:none}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.tile{display:flex;align-items:center;gap:10px;min-height:66px;padding:10px;border:2px solid var(--line);background:var(--bg);border-radius:14px;text-align:left}
+.tile:active{transform:scale(.98)}
+.tile[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.tile .shape{flex:0 0 40px;height:40px;display:grid;place-items:center}
+.tile .shape i{display:block;border:1.5px solid rgb(0 0 0/.45);border-radius:2px}
+.tile b{display:block;font-size:16px;line-height:1.15}
+.tile small{display:block;color:var(--muted);font-size:13px;margin-top:2px}
+.chosen{display:flex;align-items:center;gap:12px;padding:12px;border:2px solid var(--accent);border-radius:14px;background:var(--accent-soft)}
+.chosen .shape{flex:0 0 52px;height:52px;display:grid;place-items:center}
+.chosen .shape i{display:block;border:2px solid rgb(0 0 0/.5);border-radius:3px}
+.chosen b{display:block;font-size:20px;line-height:1.1}
+.chosen small{color:var(--muted);font-size:14px}
+.chosen .btn{margin-left:auto}
+.recent{display:flex;gap:6px;flex-wrap:wrap}
+.recent button{border:1.5px solid var(--line);background:var(--bg);border-radius:999px;padding:7px 12px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px}
+.recent button i{width:12px;height:12px;border-radius:2px;border:1px solid rgb(0 0 0/.35)}
+.search-t{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:11px 12px;font-size:16px}
+.sticky{position:sticky;bottom:0;background:var(--panel);padding-top:6px;margin-top:2px}
 .type{flex:0 0 auto;display:flex;align-items:center;gap:7px;border:1.5px solid var(--line);background:var(--bg);border-radius:10px;padding:7px 10px;font-size:14px;font-weight:600;white-space:nowrap}
 .type i{width:14px;height:14px;border-radius:3px;border:1px solid rgb(0 0 0/.3)}
 .type small{font-weight:400;color:var(--muted)}
@@ -225,7 +242,14 @@ map.on('click', e => { if (placeTap){ placeAt(e.latlng.lat, e.latlng.lng, null, 
 let tab = 'poser', placeTap = false;
 document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; document.querySelectorAll('[data-tab]').forEach(x => x.setAttribute('aria-selected', x === b)); render(); });
 function setTab(t){ tab = t; document.querySelectorAll('[data-tab]').forEach(x => x.setAttribute('aria-selected', x.dataset.tab === t)); render(); }
-let draft = {label:'', note:''};
+let draft = {label:'', note:''}, picking = !DB.last, pickQ = '';
+const LIBRE = () => ({k:'__libre', l:'Autre', w:(DB.libre && DB.libre.w) || 4, h:(DB.libre && DB.libre.h) || 3, c:'#e8551b'});
+const TYPES = () => [...CATALOG, LIBRE()];
+const curType = () => DB.last === '__libre' ? LIBRE() : (typeOf(DB.last) || CATALOG[0]);
+const dims = c => `${fmt(c.w, c.w % 1 ? 1 : 0)} × ${fmt(c.h, c.h % 1 ? 1 : 0)} m`;
+// pictogramme à l'échelle : la forme garde les proportions du matériel
+function shapeHTML(c, box){ const m = Math.max(c.w, c.h), w = Math.max(5, Math.round(box * c.w / m)), h = Math.max(5, Math.round(box * c.h / m));
+  return `<span class="shape"><i style="width:${w}px;height:${h}px;background:${c.c}"></i></span>`; }
 function renderGpsLine(){ const e = $('#gps-line'); if (!e) return;
   e.className = fix ? (accClass(fix.acc) === 'ok' ? 'okbox' : 'warn') : 'warn';
   e.textContent = !fix ? 'En attente du GPS… sortez à découvert.' : accClass(fix.acc) === 'ok' ? `Précision ± ${fmt(fix.acc)} m : vous pouvez poser.` : `Précision ± ${fmt(fix.acc)} m : attendez quelques secondes ou ajustez ensuite à la main.`; }
@@ -235,13 +259,23 @@ function render(){
   if (tab === 'poser'){
     if (it) h += editHTML(it);
     else {
-      h += `<div class="lbl">Matériel</div><div class="types">${CATALOG.map(c => `<button class="type" data-k="${c.k}" aria-pressed="${c.k === DB.last}"><i style="background:${c.c}"></i>${esc(c.l)} <small>${fmt(c.w, c.w % 1 ? 1 : 0)}×${fmt(c.h, c.h % 1 ? 1 : 0)}</small></button>`).join('')}<button class="type" data-k="__libre" aria-pressed="${DB.last === '__libre'}"><i style="background:#e8551b"></i>Autre <small>dimensions libres</small></button></div>
+      const T = curType();
+      if (picking){
+        const q = (pickQ || '').trim().toLowerCase(), list = TYPES().filter(c => !q || c.l.toLowerCase().includes(q));
+        h += `<div class="row" style="justify-content:space-between"><div class="lbl">Choisir le matériel</div>${DB.last ? '<button class="btn" id="pk-x" style="padding:7px 12px">Fermer</button>' : ''}</div>
+          ${TYPES().length > 8 ? `<input class="search-t" id="pk-q" type="search" placeholder="Rechercher (barnum, WC, scène…)" value="${esc(pickQ || '')}" autocomplete="off">` : ''}
+          <div class="grid">${list.map(c => `<button class="tile" data-k="${c.k}" aria-pressed="${c.k === DB.last}">${shapeHTML(c, 36)}<span><b>${esc(c.l)}</b><small>${c.k === '__libre' ? 'dimensions libres' : dims(c)}</small></span></button>`).join('') || '<p class="note">Aucun matériel ne correspond.</p>'}</div>`;
+        pane.innerHTML = h; bind(); const qi = $('#pk-q'); if (qi && pickQ) { qi.focus(); qi.setSelectionRange(qi.value.length, qi.value.length); } return;
+      }
+      const rec = (DB.recent || []).filter(k => k !== DB.last).map(k => TYPES().find(c => c.k === k)).filter(Boolean).slice(0, 4);
+      h += `<div class="chosen">${shapeHTML(T, 48)}<span><b>${esc(T.l)}</b><small>${T.k === '__libre' ? 'dimensions libres' : dims(T)}</small></span><button class="btn" id="pk-open">Changer</button></div>
+        ${rec.length ? `<div class="recent">${rec.map(c => `<button data-rk="${c.k}"><i style="background:${c.c}"></i>${esc(c.l)}</button>`).join('')}</div>` : ''}
       ${DB.last === '__libre' ? `<div class="row"><label class="field"><span class="lbl">Nom</span><input id="l-name" value="${esc(DB.libre?.l || 'Emprise')}"></label><label class="field" style="max-width:80px"><span class="lbl">Long.</span><input id="l-w" type="number" inputmode="decimal" value="${DB.libre?.w || 4}"></label><label class="field" style="max-width:80px"><span class="lbl">Larg.</span><input id="l-h" type="number" inputmode="decimal" value="${DB.libre?.h || 3}"></label></div>` : ''}
       <div class="row"><label class="field"><span class="lbl">Nom (association, usage)</span><input id="d-label" value="${esc(draft.label)}" placeholder="Ex. : SCO Rugby" autocomplete="off"></label></div>
       <label class="field"><span class="lbl">Note</span><input id="d-note" value="${esc(draft.note)}" placeholder="Ex. : BAT Elec, DPMS…" autocomplete="off"></label>
       <div id="gps-line"></div>
       <div id="m-box" hidden><div class="prog" id="m-prog"><i></i></div><p class="note" id="m-txt"></p></div>
-      <div class="row"><button class="btn primary big" id="b-place">${placeTap ? 'Touchez la carte…' : crossOn ? 'Poser au viseur' : 'Poser ici'}</button></div>
+      <div class="row sticky"><button class="btn primary big" id="b-place">${placeTap ? 'Touchez la carte…' : crossOn ? 'Poser au viseur' : 'Poser ici'}</button></div>
       <p class="note">« Poser ici » : placez-vous au <b>centre</b> de l'emplacement, restez immobile 6 s. Le viseur ✛ pose au centre de la carte, sans GPS.</p>`;
     }
   } else if (tab === 'liste'){
@@ -272,8 +306,13 @@ function editHTML(it){
 }
 function bind(){
   const p = plan(), it = p.items.find(i => i.id === sel);
-  document.querySelectorAll('.type').forEach(b => b.onclick = () => { DB.last = b.dataset.k; save(); render(); });
   const on = (id, ev, fn) => { const e = $(id); if (e) e[ev] = fn; };
+  const choose = k => { DB.last = k; DB.recent = [k, ...(DB.recent || []).filter(x => x !== k)].slice(0, 6); picking = false; pickQ = ''; save(); render(); };
+  document.querySelectorAll('.tile').forEach(b => b.onclick = () => choose(b.dataset.k));
+  document.querySelectorAll('[data-rk]').forEach(b => b.onclick = () => choose(b.dataset.rk));
+  on('#pk-open', 'onclick', () => { picking = true; render(); });
+  on('#pk-x', 'onclick', () => { picking = false; pickQ = ''; render(); });
+  on('#pk-q', 'oninput', e => { pickQ = e.target.value; render(); });
   on('#d-label', 'oninput', e => draft.label = e.target.value);
   on('#d-note', 'oninput', e => draft.note = e.target.value);
   ['#l-name', '#l-w', '#l-h'].forEach(id => on(id, 'onchange', () => { DB.libre = {l:$('#l-name').value || 'Emprise', w:parseFloat($('#l-w').value) || 3, h:parseFloat($('#l-h').value) || 3}; save(); }));
