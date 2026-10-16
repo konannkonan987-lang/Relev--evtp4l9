@@ -1,0 +1,2 @@
+{"name":"Relevé terrain","short_name":"Relevé","start_url":"./","scope":"./","display":"standalone","orientation":"any","background_color":"#1c2a31","theme_color":"#1c2a31","lang":"fr",
+"icons":[{"src":"icon-192.png","sizes":"192x192","type":"image/png"},{"src":"icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}]}
